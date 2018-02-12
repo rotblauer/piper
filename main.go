@@ -160,14 +160,13 @@ func main() {
 		log.Println("seds",seds)
 		log.Println("rawSeds", rawSeds)
 		fmt.Println(sedsDisplayString())
-
 		log.Println("doing")
+
 		if err := Execute(&b,
 			exec.Command("grep", "-E", "'disc'")); err != nil {
 			panic(err)
 		}
 		writeFile(outfilePath, b.Bytes())
-
 	}
 
 	if err := scanner.Err(); err != nil {
