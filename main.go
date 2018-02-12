@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"bufio"
 	"path/filepath"
@@ -12,9 +11,7 @@ import (
 	"os/exec"
 	"regexp"
 	"errors"
-	"log"
-	"io"
-	"bytes"
+	"fmt"
 )
 
 var infilePath string
@@ -63,11 +60,11 @@ func addSed(s string) {
 	rawSeds = append(rawSeds, s)
 }
 
-func editSed(i int, s string) {
+func editSed(i int, s []string) {
 	var outSeds []string
 	for j, val := range rawSeds {
 		if j == i {
-			outSeds = append(outSeds, s)
+			outSeds = append(outSeds, strings.Join(s, " "))
 		} else {
 			outSeds = append(outSeds, val)
 		}
@@ -100,6 +97,15 @@ func sedsDisplayString() string {
 	return strings.Join(os, " | ")
 }
 
+func sedsDisplayStringPretty() string {
+	var os []string
+	for i, v := range seds {
+		s := fmt.Sprintf("%d[%s]", i, strings.Join(v.Args, " "))
+		os = append(os, s)
+	}
+	return strings.Join(os, "\n")
+}
+
 func buildCmds() []*exec.Cmd {
 	var cmds []*exec.Cmd
 	cmds = append(cmds, exec.Command(baseCmdName, infilePath))
@@ -117,7 +123,7 @@ func handleInput(s string) ([]*exec.Cmd, error) {
 	if strings.HasPrefix(s, ":") {
 		s = strings.TrimPrefix(s, ":")
 		ss := strings.Split(s, " ")
-		if len(ss) >= 2 {
+		if len(ss) < 2 {
 			panic("use... :rm 1 , :e 2 s/old/new/g ")
 		}
 		i, err := strconv.Atoi(ss[1])
@@ -126,9 +132,9 @@ func handleInput(s string) ([]*exec.Cmd, error) {
 		}
 		switch ss[0] {
 		case "rm":
-			rmSed(i)
+			rmSed(i-1)
 		case "e":
-			editSed(i, ss[2])
+			editSed(i-1, ss[2:])
 		default:
 		}
 	} else {
@@ -144,88 +150,47 @@ func main() {
 	if _, err := os.Create(outfilePath); err != nil {
 		panic(err)
 	}
+	fmt.Println("Sending out to:", ensureAbsolutePath(outfilePath))
+	fmt.Println(" ")
+	fmt.Println("    :rm N", "<- remove N command")
+	fmt.Println("    :e 1 grep ok", "<- change N command to 'grep ok'")
+	fmt.Println(" ")
+	fmt.Println("Enter your chainable filter command:")
 	for scanner.Scan() {
-		var b bytes.Buffer
 		input := scanner.Text()
 		cmds, err := handleInput(input)
 		if err == errQuitting {
 			break
 		} else if err != nil {
+			fmt.Println("abc")
 			panic(err)
 		} else if cmds == nil {
+			fmt.Println("def")
 			panic("cmds are nil")
 		}
-		seds = buildCmds()
 
-		log.Println("seds",seds)
-		log.Println("rawSeds", rawSeds)
-		fmt.Println(sedsDisplayString())
-		log.Println("doing")
+		seds = cmds
+		fmt.Println("Command:\n")
+		fmt.Println(sedsDisplayStringPretty())
+		fmt.Println("  -> ", sedsDisplayString(), "\n")
 
-		if err := Execute(&b,
-			exec.Command("grep", "-E", "'disc'")); err != nil {
-			panic(err)
+
+		bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
+		if err != nil {
+			fmt.Println("Error executing command.")
+			rmSed(len(seds)-2) // remove last one
+			seds = buildCmds()
+
+			fmt.Println("Command:\n")
+			fmt.Println(sedsDisplayStringPretty())
 		}
-		writeFile(outfilePath, b.Bytes())
+		writeFile(outfilePath, bs)
+		fmt.Println("\nEnter your chainable filter command:")
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Println("scanner error")
+		fmt.Println("jkl")
+		fmt.Println("scanner error")
 		panic(err)
 	}
-}
-
-func Execute(output_buffer *bytes.Buffer, stack ...*exec.Cmd) (err error) {
-	var error_buffer bytes.Buffer
-	pipe_stack := make([]*io.PipeWriter, len(stack)-1)
-	i := 0
-	for ; i < len(stack)-1; i++ {
-		stdin_pipe, stdout_pipe := io.Pipe()
-		stack[i].Stdout = stdout_pipe
-		stack[i].Stderr = &error_buffer
-		stack[i+1].Stdin = stdin_pipe
-		pipe_stack[i] = stdout_pipe
-	}
-	stack[i].Stdout = output_buffer
-	stack[i].Stderr = &error_buffer
-
-	if err := call(stack, pipe_stack); err != nil {
-		log.Println("got err")
-		log.Fatalln(string(error_buffer.Bytes()), err)
-	}
-	return err
-}
-
-func call(stack []*exec.Cmd, pipes []*io.PipeWriter) (err error) {
-	if stack[0].Process == nil {
-		log.Println("starting 0")
-		if err = stack[0].Start(); err != nil {
-			log.Println("goterrrr", err)
-			log.Println(stack[0].Args)
-			return err
-		} else {
-			log.Println("was ok", stack[0].Args)
-		}
-	}
-	if len(stack) > 1 {
-		log.Println("+1")
-		if err = stack[1].Start(); err != nil {
-			log.Println("er1+", err)
-			return err
-		}
-		defer func() {
-			if err == nil {
-				pipes[0].Close()
-				err = call(stack[1:], pipes[1:])
-				if err != nil {
-					log.Println("defererr+", err)
-				}
-			}
-		}()
-	}
-	e := stack[0].Wait()
-	if e != nil {
-		log.Println("waiterr", e)
-	}
-	return e
 }
