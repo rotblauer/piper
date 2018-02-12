@@ -33,15 +33,8 @@ func init() {
 	flag.StringVar(&infilePath, "i", "./in.txt", "file to manipulate")
 	flag.StringVar(&outfilePath, "o", "./out.txt", "file to generate")
 	flag.StringVar(&baseCmdName, "b", "cat", "base command to grab from in file")
+	flag.Parse()
 }
-
-//func readFile(p string) []byte {
-//	b, err := ioutil.ReadFile(p)
-//	if err != nil {
-//		panic(err)
-//	}
-//	return b
-//}
 
 func addSed(s string) {
 	rawSeds = append(rawSeds, s)
@@ -89,7 +82,7 @@ func sedsDisplayStringPretty() string {
 }
 
 func handleInput(s string) (error) {
-	quitRe := regexp.MustCompile(`(quit|exit)`)
+	quitRe := regexp.MustCompile(`(quit|exit|done)`)
 	if quitRe.MatchString(s) {
 		return errQuitting
 	}
@@ -127,12 +120,20 @@ func main() {
 	if _, err := os.Create(outfilePath); err != nil {
 		panic(err)
 	}
+	fmt.Println("Reading in from:", infilePath)
 	fmt.Println("Sending out to:", ensureAbsolutePath(outfilePath))
 	fmt.Println(" ")
 	fmt.Println("    :rm N", "<- remove N command")
 	fmt.Println("    :e 1 grep ok", "<- change N command to 'grep ok'")
 	fmt.Println(" ")
 	fmt.Println("Enter your chainable filter command:")
+
+	bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
+	if err != nil {
+		log.Println("Error executing command.")
+	}
+	writeFile(outfilePath, bs)
+
 	for scanner.Scan() {
 		input := scanner.Text()
 		err := handleInput(input)
@@ -148,21 +149,16 @@ func main() {
 		fmt.Println(sedsDisplayStringPretty())
 		fmt.Println("  -> ", sedsDisplayString(), "\n")
 
-
 		bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
 		if err != nil {
 			log.Println("Error executing command.")
-			//	rmSed(len(rawSeds)-1) // remove last one
-			//
-			//	fmt.Println("---------")
-			//	fmt.Println("Command:\n")
-			//	fmt.Println(sedsDisplayStringPretty())
-			//	bs = []byte("")
-			//}
 		}
 		writeFile(outfilePath, bs)
 		fmt.Println("\nEnter your chainable filter command:")
 	}
+
+	fmt.Println("Final command was:")
+	fmt.Println(sedsDisplayString())
 
 	if err := scanner.Err(); err != nil {
 		fmt.Println("jkl")
