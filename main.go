@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"errors"
 	"fmt"
+	"log"
 )
 
 var infilePath string
@@ -106,9 +107,9 @@ func handleInput(s string) (error) {
 		}
 		switch ss[0] {
 		case "rm":
-			rmSed(i-1)
+			rmSed(i)
 		case "e":
-			editSed(i-1, ss[2:])
+			editSed(i, ss[2:])
 		default:
 		}
 	} else {
@@ -119,6 +120,8 @@ func handleInput(s string) (error) {
 
 func main() {
 	infilePath = ensureAbsolutePath(infilePath)
+
+	addSed(baseCmdName + " " + infilePath)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if _, err := os.Create(outfilePath); err != nil {
@@ -140,18 +143,22 @@ func main() {
 			panic(err)
 		}
 
+		fmt.Println("---------")
 		fmt.Println("Command:\n")
 		fmt.Println(sedsDisplayStringPretty())
 		fmt.Println("  -> ", sedsDisplayString(), "\n")
 
 
-		bs, err := exec.Command("bash", "-c", "", sedsDisplayString()).Output()
+		bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
 		if err != nil {
-			fmt.Println("Error executing command.")
-			rmSed(len(rawSeds)-2) // remove last one
-
-			fmt.Println("Command:\n")
-			fmt.Println(sedsDisplayStringPretty())
+			log.Println("Error executing command.")
+			//	rmSed(len(rawSeds)-1) // remove last one
+			//
+			//	fmt.Println("---------")
+			//	fmt.Println("Command:\n")
+			//	fmt.Println(sedsDisplayStringPretty())
+			//	bs = []byte("")
+			//}
 		}
 		writeFile(outfilePath, bs)
 		fmt.Println("\nEnter your chainable filter command:")
