@@ -160,9 +160,8 @@ func main() {
 		log.Println("seds",seds)
 		log.Println("rawSeds", rawSeds)
 		fmt.Println(sedsDisplayString())
-		//if err := Execute(&b, cmds...); err != nil {
-		//	panic(err)
-		//}
+
+		log.Println("doing")
 		if err := Execute(&b,
 			exec.Command("grep", "-E", "'disc'")); err != nil {
 			panic(err)
@@ -192,6 +191,7 @@ func Execute(output_buffer *bytes.Buffer, stack ...*exec.Cmd) (err error) {
 	stack[i].Stderr = &error_buffer
 
 	if err := call(stack, pipe_stack); err != nil {
+		log.Println("got err")
 		log.Fatalln(string(error_buffer.Bytes()), err)
 	}
 	return err
@@ -199,20 +199,34 @@ func Execute(output_buffer *bytes.Buffer, stack ...*exec.Cmd) (err error) {
 
 func call(stack []*exec.Cmd, pipes []*io.PipeWriter) (err error) {
 	if stack[0].Process == nil {
+		log.Println("starting 0")
 		if err = stack[0].Start(); err != nil {
+			log.Println("goterrrr", err)
+			log.Println(stack[0].Args)
 			return err
+		} else {
+			log.Println("was ok", stack[0].Args)
 		}
 	}
 	if len(stack) > 1 {
+		log.Println("+1")
 		if err = stack[1].Start(); err != nil {
+			log.Println("er1+", err)
 			return err
 		}
 		defer func() {
 			if err == nil {
 				pipes[0].Close()
 				err = call(stack[1:], pipes[1:])
+				if err != nil {
+					log.Println("defererr+", err)
+				}
 			}
 		}()
 	}
-	return stack[0].Wait()
+	e := stack[0].Wait()
+	if e != nil {
+		log.Println("waiterr", e)
+	}
+	return e
 }
