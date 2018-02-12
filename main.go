@@ -18,7 +18,6 @@ var infilePath string
 var outfilePath string
 var baseCmdName = "cat"
 var rawSeds []string
-var seds []*exec.Cmd // hold a set of arbitrary operations
 var errQuitting = errors.New("quitting")
 
 func ensureAbsolutePath(s string) string {
@@ -27,19 +26,6 @@ func ensureAbsolutePath(s string) string {
 		panic(err)
 	}
 	return p
-}
-
-func parseRawSedsToCmds() []*exec.Cmd {
-	var o []*exec.Cmd
-	for _, v := range rawSeds {
-		ss := strings.Split(v, " ")
-		if len(ss) > 1 {
-			o = append(o, exec.Command(ss[0], ss[1:]...))
-		} else {
-			o = append(o, exec.Command(ss[0]))
-		}
-	}
-	return o
 }
 
 func init() {
@@ -89,34 +75,22 @@ func writeFile(p string, b []byte) {
 }
 
 func sedsDisplayString() string {
-	var os []string
-	for _, v := range seds {
-		s := strings.Join(v.Args, " ")
-		os = append(os, s)
-	}
-	return strings.Join(os, " | ")
+	return strings.Join(rawSeds, " | ")
 }
 
 func sedsDisplayStringPretty() string {
 	var os []string
-	for i, v := range seds {
-		s := fmt.Sprintf("%d[%s]", i, strings.Join(v.Args, " "))
+	for i, v := range rawSeds {
+		s := fmt.Sprintf("%d[%s]\n", i, v)
 		os = append(os, s)
 	}
 	return strings.Join(os, "\n")
 }
 
-func buildCmds() []*exec.Cmd {
-	var cmds []*exec.Cmd
-	cmds = append(cmds, exec.Command(baseCmdName, infilePath))
-	cmds = append(cmds, parseRawSedsToCmds()...)
-	return cmds
-}
-
-func handleInput(s string) ([]*exec.Cmd, error) {
+func handleInput(s string) (error) {
 	quitRe := regexp.MustCompile(`(quit|exit)`)
 	if quitRe.MatchString(s) {
-		return nil, errQuitting
+		return errQuitting
 	}
 
 	// meta edit/rm controls
@@ -140,7 +114,7 @@ func handleInput(s string) ([]*exec.Cmd, error) {
 	} else {
 		addSed(s)
 	}
-	return buildCmds(), nil
+	return nil
 }
 
 func main() {
@@ -158,28 +132,23 @@ func main() {
 	fmt.Println("Enter your chainable filter command:")
 	for scanner.Scan() {
 		input := scanner.Text()
-		cmds, err := handleInput(input)
+		err := handleInput(input)
 		if err == errQuitting {
 			break
 		} else if err != nil {
 			fmt.Println("abc")
 			panic(err)
-		} else if cmds == nil {
-			fmt.Println("def")
-			panic("cmds are nil")
 		}
 
-		seds = cmds
 		fmt.Println("Command:\n")
 		fmt.Println(sedsDisplayStringPretty())
 		fmt.Println("  -> ", sedsDisplayString(), "\n")
 
 
-		bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
+		bs, err := exec.Command("bash", "-c", "", sedsDisplayString()).Output()
 		if err != nil {
 			fmt.Println("Error executing command.")
-			rmSed(len(seds)-2) // remove last one
-			seds = buildCmds()
+			rmSed(len(rawSeds)-2) // remove last one
 
 			fmt.Println("Command:\n")
 			fmt.Println(sedsDisplayStringPretty())
