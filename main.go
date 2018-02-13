@@ -159,8 +159,9 @@ func main() {
 	}
 
 	fmt.Println(`
-    :rm N", "<- remove N command
-    :e 1 grep ok", "<- change N command to 'grep ok'
+    :rm N            <- remove N command
+    :e N | grep ok   <- change N command to '| grep ok'
+	:q               <- quit
 `)
 	str, bs, err := executeCmd()
 	if err != nil {
@@ -179,6 +180,9 @@ func main() {
 			panic(err)
 		}
 		str, bs, err := executeCmd()
+		if err != nil {
+			fmt.Println("Error executing command:", err)
+		}
 		writeFile(outfilePath, bs)
 		printStatus(str)
 	}
