@@ -37,7 +37,7 @@ func init() {
 	flag.Parse()
 }
 
-func addSed(s string) {
+func appendSed(s string) {
 	rawSeds = append(rawSeds, s)
 }
 
@@ -51,6 +51,18 @@ func editSed(i int, s []string) {
 		}
 	}
 	rawSeds = outSeds
+}
+
+func insertSed(i int, s []string) {
+	var out []string
+	for j, v := range rawSeds {
+		if j == i {
+			out = append(out, strings.Join(s, " "))
+		}
+		out = append(out, v)
+	}
+
+	rawSeds = out
 }
 
 func rmSed(i int) {
@@ -76,7 +88,7 @@ func concatSeds() string {
 func sedsDisplayStringPretty() string {
 	var os []string
 	for i, v := range rawSeds {
-		s := fmt.Sprintf("    %d[%s]\n", i, v)
+		s := fmt.Sprintf("    [%d]  %s\n", i, v)
 		os = append(os, s)
 	}
 	return strings.Join(os, "\n")
@@ -113,10 +125,12 @@ func handleInput(s string) (error) {
 			rmSed(i)
 		case "e":
 			editSed(i, ss[2:])
+		case "i":
+			insertSed(i, ss[2:])
 		default:
 		}
 	} else {
-		addSed(s)
+		appendSed(s)
 	}
 	return nil
 }
@@ -151,7 +165,7 @@ func main() {
 	fmt.Println("Reading in from:", infilePath)
 	fmt.Println("Sending out to:", outfilePath)
 
-	addSed(baseCmdName + " " + infilePath)
+	appendSed(baseCmdName + " " + infilePath)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if _, err := os.Create(outfilePath); err != nil {
@@ -161,6 +175,7 @@ func main() {
 	fmt.Println(`
     :rm N            <- remove N command
     :e N | grep ok   <- change N command to '| grep ok'
+    :i N | grep ok   <- insert command at index N as '| grep ok'
 	:q               <- quit
 `)
 	str, bs, err := executeCmd()
