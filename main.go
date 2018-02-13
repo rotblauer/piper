@@ -12,11 +12,11 @@ import (
 	"regexp"
 	"errors"
 	"fmt"
-	"log"
 )
 
 var infilePath string
 var outfilePath string
+var shellCmd = "bash -c"
 var baseCmdName = "cat"
 var rawSeds []string
 var errQuitting = errors.New("quitting")
@@ -33,6 +33,7 @@ func init() {
 	flag.StringVar(&infilePath, "i", "./in.txt", "file to manipulate")
 	flag.StringVar(&outfilePath, "o", "./out.txt", "file to generate")
 	flag.StringVar(&baseCmdName, "b", "cat", "base command to grab from in file")
+	flag.StringVar(&shellCmd, "s", "bash -c", "base command to grab from in file")
 	flag.Parse()
 }
 
@@ -68,21 +69,30 @@ func writeFile(p string, b []byte) {
 	}
 }
 
-func sedsDisplayString() string {
-	return strings.Join(rawSeds, " | ")
+func concatSeds() string {
+	return strings.Join(rawSeds, " ")
 }
 
 func sedsDisplayStringPretty() string {
 	var os []string
 	for i, v := range rawSeds {
-		s := fmt.Sprintf("%d[%s]\n", i, v)
+		s := fmt.Sprintf("    %d[%s]\n", i, v)
 		os = append(os, s)
 	}
 	return strings.Join(os, "\n")
 }
 
+func printStatus(doneCommand string) {
+	fmt.Println("--------------------------")
+	fmt.Println("Executed:", doneCommand)
+	fmt.Println("--------------------------")
+	fmt.Println("Command:\n")
+	fmt.Println(sedsDisplayStringPretty())
+	fmt.Println("Add (default), edit, or remove a chainable filter command:")
+}
+
 func handleInput(s string) (error) {
-	quitRe := regexp.MustCompile(`(quit|exit|done)`)
+	quitRe := regexp.MustCompile(`^:q`)
 	if quitRe.MatchString(s) {
 		return errQuitting
 	}
@@ -111,8 +121,35 @@ func handleInput(s string) (error) {
 	return nil
 }
 
+func executeCmd() (string, []byte, error) {
+	var err error
+	var bs []byte
+
+	sc := shellCmd
+	scs := strings.Split(sc, " ")
+
+	var line string // is unified, legible string for printing
+	var lines = []string{scs[0]} // always len 3
+
+	if len(scs) > 1 {
+		lines = append(lines, scs[1:]...)
+	} else {
+		lines = append(lines, "")
+	}
+	lines = append(lines, concatSeds())
+	line = strings.Join(lines, " ")
+
+	bs, err = exec.Command(lines[0], lines[1], lines[2]).Output()
+	return line, bs, err
+}
+
 func main() {
 	infilePath = ensureAbsolutePath(infilePath)
+	outfilePath = ensureAbsolutePath(outfilePath)
+
+	// Print usage on config on startup
+	fmt.Println("Reading in from:", infilePath)
+	fmt.Println("Sending out to:", outfilePath)
 
 	addSed(baseCmdName + " " + infilePath)
 
@@ -120,19 +157,17 @@ func main() {
 	if _, err := os.Create(outfilePath); err != nil {
 		panic(err)
 	}
-	fmt.Println("Reading in from:", infilePath)
-	fmt.Println("Sending out to:", ensureAbsolutePath(outfilePath))
-	fmt.Println(" ")
-	fmt.Println("    :rm N", "<- remove N command")
-	fmt.Println("    :e 1 grep ok", "<- change N command to 'grep ok'")
-	fmt.Println(" ")
-	fmt.Println("Enter your chainable filter command:")
 
-	bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
+	fmt.Println(`
+    :rm N", "<- remove N command
+    :e 1 grep ok", "<- change N command to 'grep ok'
+`)
+	str, bs, err := executeCmd()
 	if err != nil {
-		log.Println("Error executing command.")
+		fmt.Println("Error executing command:", err)
 	}
 	writeFile(outfilePath, bs)
+	printStatus(str)
 
 	for scanner.Scan() {
 		input := scanner.Text()
@@ -143,22 +178,13 @@ func main() {
 			fmt.Println("abc")
 			panic(err)
 		}
-
-		fmt.Println("---------")
-		fmt.Println("Command:\n")
-		fmt.Println(sedsDisplayStringPretty())
-		fmt.Println("  -> ", sedsDisplayString(), "\n")
-
-		bs, err := exec.Command("bash", "-c", sedsDisplayString()).Output()
-		if err != nil {
-			log.Println("Error executing command.")
-		}
+		str, bs, err := executeCmd()
 		writeFile(outfilePath, bs)
-		fmt.Println("\nEnter your chainable filter command:")
+		printStatus(str)
 	}
 
 	fmt.Println("Final command was:")
-	fmt.Println(sedsDisplayString())
+	fmt.Println(concatSeds())
 
 	if err := scanner.Err(); err != nil {
 		fmt.Println("jkl")
