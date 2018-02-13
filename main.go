@@ -146,7 +146,8 @@ func printStatus(doneCommand string) {
 	fmt.Println("--------------------------")
 	fmt.Println("Command:\n")
 	fmt.Println(sedsDisplayStringPretty())
-	fmt.Println("Add (default), edit, or remove a chainable filter command:")
+	fmt.Println(`
+Awaiting command...`)
 }
 
 func handleInput(s string) (error) {
@@ -160,7 +161,14 @@ func handleInput(s string) (error) {
 		s = strings.TrimPrefix(s, ":")
 		ss := strings.Split(s, " ")
 		if len(ss) < 2 {
-			panic("use... :rm 1 , :e 2 s/old/new/g ")
+			if ss[0] == "h" {
+
+				printUsage()
+				fmt.Println("Awaiting command...")
+				return errContinue
+			} else {
+				panic("use... :r 1 , :e 2 s/old/new/g ")
+			}
 		}
 		i, err := strconv.Atoi(ss[1])
 		if err != nil {
@@ -170,18 +178,34 @@ func handleInput(s string) (error) {
 				return errContinue
 			case "l":
 				load(ss[1])
+				str, bs, err := executeCmd()
+				if err != nil {
+					fmt.Println("Error executing command:", err)
+				}
+				writeFile(outfilePath, bs)
+				printStatus(str)
+
 				return errContinue
+			default:
+				fmt.Println(ss[0], " = UNKNOWN COMMAND")
+				printUsage()
+				fmt.Println("Awaiting command...")
 			}
-			return err
+			if ss[0] == "r" || ss[0] == "i" || ss[0] == "e" {
+				return err
+			}
 		}
 		switch ss[0] {
-		case "rm":
+		case "r":
 			rmSed(i)
 		case "e":
 			editSed(i, ss[2:])
 		case "i":
 			insertSed(i, ss[2:])
 		default:
+			fmt.Println(ss[0], " = UNKNOWN COMMAND")
+			printUsage()
+			fmt.Println("Awaiting command...")
 		}
 	} else {
 		appendSed(s)
@@ -211,6 +235,19 @@ func executeCmd() (string, []byte, error) {
 	return line, bs, err
 }
 
+func printUsage() {
+	fmt.Println(`
+    | grep ok        <- append command '| grep ok'
+    :r N             <- remove N command
+    :e N | grep ok   <- change N command to '| grep ok'
+    :i N | grep ok   <- insert command at index N as '| grep ok'
+    :w ./file.sh     <- save runnable and loadable file from current command
+    :l ./file.sh     <- load from file
+    :h               <- help
+    :q               <- quit
+`)
+}
+
 func main() {
 	infilePath = ensureAbsolutePath(infilePath)
 	outfilePath = ensureAbsolutePath(outfilePath)
@@ -226,12 +263,8 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(`
-    :rm N            <- remove N command
-    :e N | grep ok   <- change N command to '| grep ok'
-    :i N | grep ok   <- insert command at index N as '| grep ok'
-	:q               <- quit
-`)
+	printUsage()
+
 	str, bs, err := executeCmd()
 	if err != nil {
 		fmt.Println("Error executing command:", err)
