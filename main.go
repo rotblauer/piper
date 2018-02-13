@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"errors"
 	"fmt"
+	"bytes"
 )
 
 var infilePath string
@@ -20,6 +21,7 @@ var shellCmd = "bash -c"
 var baseCmdName = "cat"
 var rawSeds []string
 var errQuitting = errors.New("quitting")
+var errContinue = errors.New("fake error: just continue")
 
 func ensureAbsolutePath(s string) string {
 	p, err := filepath.Abs(s)
@@ -94,6 +96,50 @@ func sedsDisplayStringPretty() string {
 	return strings.Join(os, "\n")
 }
 
+func save(p string) {
+	pa, err := filepath.Abs(p)
+	if err != nil {
+		panic(err)
+	}
+	var data []byte
+	for _, v := range rawSeds {
+		vv := v + " \\\n"
+		data = append(data, []byte(vv)...)
+	}
+
+	dir := filepath.Dir(pa)
+	os.MkdirAll(dir, os.ModeDir)
+
+
+	if err := ioutil.WriteFile(pa, data, os.ModePerm); err != nil {
+		fmt.Println("Error saving cmd to:", pa, err)
+	} else {
+		fmt.Println("Saved cmd to:", pa)
+	}
+}
+
+func load(p string) {
+	pa, err := filepath.Abs(p)
+	if err != nil {
+		panic(err)
+	}
+	bs, err := ioutil.ReadFile(pa)
+	if err != nil {
+		fmt.Println("Could not read file:", pa, err)
+		return
+	}
+	split := bytes.Split(bs, []byte(" \\\n"))
+	rawSeds = []string{}
+	for _, s := range split {
+		v := bytes.TrimSuffix(s, []byte(" \\\n"))
+		if string(v) != "" {
+			rawSeds = append(rawSeds, string(v))
+		}
+	}
+	fmt.Println("Loaded cmd from:", pa)
+	fmt.Println(sedsDisplayStringPretty())
+}
+
 func printStatus(doneCommand string) {
 	fmt.Println("--------------------------")
 	fmt.Println("Executed:", doneCommand)
@@ -118,7 +164,15 @@ func handleInput(s string) (error) {
 		}
 		i, err := strconv.Atoi(ss[1])
 		if err != nil {
-			panic(err)
+			switch ss[0] {
+			case "w":
+				save(ss[1])
+				return errContinue
+			case "l":
+				load(ss[1])
+				return errContinue
+			}
+			return err
 		}
 		switch ss[0] {
 		case "rm":
@@ -190,6 +244,8 @@ func main() {
 		err := handleInput(input)
 		if err == errQuitting {
 			break
+		} else if err == errContinue {
+			continue
 		} else if err != nil {
 			fmt.Println("abc")
 			panic(err)
